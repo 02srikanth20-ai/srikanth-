@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rook Run - 4x4 Survival Chess</title>
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at center, #1b2838 0%, #0d121d 100%);
+      --board-border: #2a3d52;
+      --light-square: #eadeca;
+      --dark-square: #b88b4a;
+      --highlight: rgba(76, 201, 240, 0.6);
+      --danger: rgba(239, 71, 111, 0.6);
+      --gold: #ffd166;
+      --text: #f8f9fa;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background: var(--bg-gradient);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .game-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      background: linear-gradient(45deg, #ffd166, #f72585);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: #a0aec0;
+    }
+
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 12px 25px;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    .stat-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #a0aec0;
+      letter-spacing: 1px;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: var(--gold);
+    }
+
+    .board-wrapper {
+      perspective: 1000px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .chessboard {
+      width: 360px;
+      height: 360px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      border: 12px solid var(--board-border);
+      border-radius: 12px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6),
+                  inset 0 0 15px rgba(0, 0, 0, 0.5);
+      transform-style: preserve-3d;
+      position: relative;
+    }
+
+    .square {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .square.light {
+      background-color: var(--light-square);
+    }
+
+    .square.dark {
+      background-color: var(--dark-square);
+    }
+
+    .square.valid-move::after {
+      content: '';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: var(--highlight);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--highlight);
+    }
+
+    .square.under-attack::after {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: var(--danger);
+      opacity: 0.4;
+    }
+
+    .piece {
+      width: 80%;
+      height: 80%;
+      z-index: 2;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      filter: drop-shadow(0 8px 6px rgba(0, 0, 0, 0.4));
+    }
+
+    .piece svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(10, 15, 26, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 35px;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      transform: translateY(20px);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: translateY(0);
+    }
+
+    .modal-card h2 {
+      font-size: 2rem;
+      color: #ef476f;
+      margin-bottom: 10px;
+    }
+
+    .modal-card p {
+      color: #cbd5e1;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+
+    .rank-badge {
+      display: inline-block;
+      margin: 15px 0;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #ffd166, #f72585);
+      color: #000;
+      font-weight: 800;
+      border-radius: 20px;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+      box-shadow: 0 4px 15px rgba(247, 37, 133, 0.4);
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #4cc9f0, #4361ee);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 15px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(67, 97, 238, 0.4);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(67, 97, 238, 0.6);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    @media (max-width: 420px) {
+      .chessboard {
+        width: 300px;
+        height: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-container">
+    <header>
+      <h1>Rook Run</h1>
+      <div class="subtitle">Outmaneuver the dual AI Rooks on a 4x4 board</div>
+    </header>
+
+    <div class="hud">
+      <div class="stat-box">
+        <span class="stat-label">Turn</span>
+        <span class="stat-value" id="turn-indicator">Bishop</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Escapes</span>
+        <span class="stat-value" id="score-display">0</span>
+      </div>
+    </div>
+
+    <div class="board-wrapper">
+      <div class="chessboard" id="board"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="game-over-modal">
+    <div class="modal-card">
+      <h2>Checkmate!</h2>
+      <p>The Bishop has been cornered.</p>
+      <p>Total Escapes: <strong id="final-score" style="color:var(--gold)">0</strong></p>
+      <div>
+        <span class="rank-badge" id="rank-display">Rank: Novice</span>
+      </div>
+      <button class="btn" onclick="initGame()">Try Again</button>
+    </div>
+  </div>
+
+  <script>
+    // --- SVGs for High-Class Pieces ---
+    const BISHOP_SVG = `
+      <div class="piece" id="bishop">
+        <svg viewBox="0 0 45 45">
+          <g fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <g fill="#ffffff" stroke="#000000">
+              <path d="M 9,36 C 12.39,35.03 19.11,36.46 22.5,34 C 25.89,36.46 32.61,35.03 36,36 C 36,36 37.65,36.54 39,38 C 38.32,38.97 37.35,38.99 36,38.5 C 32.61,37.53 25.89,38.96 22.5,37.5 C 19.11,38.96 12.39,37.53 9,38.5 C 7.646,38.99 6.677,38.97 6,38 C 7.354,36.54 9,36 9,36 z"/>
+              <path d="M 15,32 C 17.5,34.5 27.5,34.5 30,32 C 30.5,30.5 30,28.5 29,27 C 26,27 25.5,23.5 24.5,21 C 24.5,19.5 25.5,18 25.5,16 C 25.5,13.5 23,10.5 22.5,10 C 22,10.5 19.5,13.5 19.5,16 C 19.5,18 20.5,19.5 20.5,21 C 19.5,23.5 19,27 16,27 C 15,28.5 14.5,30.5 15,32 z"/>
+              <path d="M 25 8 A 2.5 2.5 0 1 1  20,8 A 2.5 2.5 0 1 1  25 8 z"/>
+            </g>
+            <path d="M 17.5,26 L 27.5,26 M 15,30 L 30,30 M 22.5,15.5 L 22.5,20.5 M 20,18 L 25,18" stroke="#000" fill="none"/>
+          </g>
+        </svg>
+      </div>`;
+
+    const ROOK_SVG = `
+      <div class="piece">
+        <svg viewBox="0 0 45 45">
+          <g fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M 9,39 L 36,39 L 36,36 L 9,36 L 9,39 z" fill="#111111" stroke="#000000" />
+            <path d="M 12,36 L 12,32 L 33,32 L 33,36 L 12,36 z" fill="#111111" stroke="#000000" />
+            <path d="M 11,14 L 11,9 L 15,9 L 15,11 L 20,11 L 20,9 L 25,9 L 25,11 L 30,11 L 30,9 L 34,9 L 34,14 L 31,17 L 31,29.5 L 14,29.5 L 14,17 L 11,14 z" fill="#111111" stroke="#000000" />
+            <path d="M 12,14 L 33,14" stroke="#ffffff" />
+            <path d="M 14,29.5 L 31,29.5" stroke="#ffffff" />
+            <path d="M 14,16.5 L 31,16.5" stroke="#ffffff" />
+            <path d="M 11,14 L 34,14" stroke="#000000" />
+          </g>
+        </svg>
+      </div>`;
+
+    // --- Dynamic Title & Rank Generators ---
+    const RANK_TITLES = [
+      "Escaped Pawn", "Agile Cleric", "Diagonal Dodger", 
+      "Grandmaster Trapper", "Phantom Bishop", "Sly Tactician",
+      "Shadow Dancer", "Board Architect", "Unreachable Cleric"
+    ];
+
+    const RANK_ADJECTIVES = [
+      "Unbelievable", "Godlike", "Calculated", "Smooth", 
+      "Illusive", "Masterful", "Legendary", "Slick"
+    ];
+
+    // --- State Variables ---
+    let bishopPos = { r: 0, c: 0 };
+    let rook1Pos = { r: 0, c: 0 }; // 1,1 in 1-index => 0,0
+    let rook2Pos = { r: 1, c: 0 }; // 2,1 in 1-index => 1,0
+    let score = 0;
+    let isPlayerTurn = true;
+    let selectedMoves = [];
+
+    const boardEl = document.getElementById('board');
+    const scoreEl = document.getElementById('score-display');
+    const turnEl = document.getElementById('turn-indicator');
+    const modalEl = document.getElementById('game-over-modal');
+
+    // --- Game Logic ---
+    function initGame() {
+      score = 0;
+      isPlayerTurn = true;
+      scoreEl.textContent = score;
+      turnEl.textContent = "Bishop";
+      turnEl.style.color = "var(--gold)";
+      modalEl.classList.remove('active');
+
+      // Set fixed positions for Rooks (1,1) and (2,1) -> 0-indexed: (0,0) and (1,0)
+      rook1Pos = { r: 0, c: 0 };
+      rook2Pos = { r: 1, c: 0 };
+
+      // Random position for Bishop (must not overlap rooks)
+      let r, c;
+      do {
+        r = Math.floor(Math.random() * 4);
+        c = Math.floor(Math.random() * 4);
+      } while ((r === 0 && c === 0) || (r === 1 && c === 0));
+
+      bishopPos = { r, c };
+
+      renderBoard();
+      highlightValidMoves();
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const square = document.createElement('div');
+          square.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
+          square.dataset.row = r;
+          square.dataset.col = c;
+
+          // Render Pieces
+          if (r === bishopPos.r && c === bishopPos.c) {
+            square.innerHTML = BISHOP_SVG;
+          } else if (r === rook1Pos.r && c === rook1Pos.c) {
+            square.innerHTML = ROOK_SVG;
+          } else if (r === rook2Pos.r && c === rook2Pos.c) {
+            square.innerHTML = ROOK_SVG;
+          }
+
+          square.addEventListener('click', () => handleSquareClick(r, c));
+          boardEl.appendChild(square);
+        }
+      }
+    }
+
+    function getBishopMoves(pos) {
+      const moves = [];
+      const directions = [
+        [-1, -1], [-1, 1], [1, -1], [1, 1]
+      ];
+
+      for (let [dr, dc] of directions) {
+        let nr = pos.r + dr;
+        let nc = pos.c + dc;
+        while (nr >= 0 && nr < 4 && nc >= 0 && nc < 4) {
+          // Rooks block bishop movement paths
+          if ((nr === rook1Pos.r && nc === rook1Pos.c) || (nr === rook2Pos.r && nc === rook2Pos.c)) {
+            break;
+          }
+          moves.push({ r: nr, c: nc });
+          nr += dr;
+          nc += dc;
+        }
+      }
+      return moves;
+    }
+
+    function isSquareAttackedByRooks(r, c, r1 = rook1Pos, r2 = rook2Pos) {
+      // Rook 1 attack path
+      if (r1.r === r || r1.c === c) return true;
+      // Rook 2 attack path
+      if (r2.r === r || r2.c === c) return true;
+      return false;
+    }
+
+    function highlightValidMoves() {
+      clearHighlights();
+      if (!isPlayerTurn) return;
+
+      selectedMoves = getBishopMoves(bishopPos);
+      
+      // Filter out moves that directly walk into capture (suicide moves disallowed unless trapped)
+      const safeMoves = selectedMoves.filter(m => !isSquareAttackedByRooks(m.r, m.c));
+
+      // If no moves exist, game over check happens
+      if (selectedMoves.length === 0 || safeMoves.length === 0) {
+        // Double check if completely cornered or forced into capture
+        if (safeMoves.length === 0) {
+          endGame();
+          return;
+        }
+      }
+
+      selectedMoves.forEach(m => {
+        const sq = getSquareEl(m.r, m.c);
+        if (sq) sq.classList.add('valid-move');
+      });
+    }
+
+    function clearHighlights() {
+      document.querySelectorAll('.square').forEach(sq => {
+        sq.classList.remove('valid-move', 'under-attack');
+      });
+    }
+
+    function handleSquareClick(r, c) {
+      if (!isPlayerTurn) return;
+
+      const isValid = selectedMoves.some(m => m.r === r && m.c === c);
+      if (!isValid) return;
+
+      // Make Bishop Move
+      bishopPos = { r, c };
+      score++;
+      scoreEl.textContent = score;
+      renderBoard();
+
+      // Check if Bishop moved into immediate line of sight (capture)
+      if (isSquareAttackedByRooks(bishopPos.r, bishopPos.c)) {
+        endGame();
+        return;
+      }
+
+      // Switch turn to Computer
+      isPlayerTurn = false;
+      turnEl.textContent = "Rooks (AI)";
+      turnEl.style.color = "#ef476f";
+      clearHighlights();
+
+      setTimeout(makeComputerMove, 600);
+    }
+
+    // --- Perfect Trapping AI Engine ---
+    function makeComputerMove() {
+      const possibleRookMoves = [];
+
+      // Generate all legal moves for Rook 1
+      getRookMoves(rook1Pos, rook2Pos).forEach(m => {
+        possibleRookMoves.push({ rook: 1, from: rook1Pos, to: m });
+      });
+
+      // Generate all legal moves for Rook 2
+      getRookMoves(rook2Pos, rook1Pos).forEach(m => {
+        possibleRookMoves.push({ rook: 2, from: rook2Pos, to: m });
+      });
+
+      let bestMove = null;
+      let minBishopEscapeMoves = Infinity;
+
+      // Minimax-style Evaluation: Find move that minimizes Bishop's safe moves
+      for (let move of possibleRookMoves) {
+        let simR1 = move.rook === 1 ? move.to : rook1Pos;
+        let simR2 = move.rook === 2 ? move.to : rook2Pos;
+
+        // Priority 1: Immediate Capture
+        if ((simR1.r === bishopPos.r && simR1.c === bishopPos.c) || 
+            (simR2.r === bishopPos.r && simR2.c === bishopPos.c)) {
+          bestMove = move;
+          break;
+        }
+
+        // Calculate available safe moves for Bishop after this hypothetical move
+        const futureBishopMoves = getBishopMoves(bishopPos).filter(
+          m => !isSquareAttackedByRooks(m.r, m.c, simR1, simR2)
+        );
+
+        if (futureBishopMoves.length < minBishopEscapeMoves) {
+          minBishopEscapeMoves = futureBishopMoves.length;
+          bestMove = move;
+        }
+      }
+
+      // Execute Best Move
+      if (bestMove) {
+        if (bestMove.rook === 1) rook1Pos = bestMove.to;
+        else rook2Pos = bestMove.to;
+      }
+
+      renderBoard();
+
+      // Check if computer captured or locked bishop
+      const currentSafeMoves = getBishopMoves(bishopPos).filter(
+        m => !isSquareAttackedByRooks(m.r, m.c)
+      );
+
+      if (isSquareAttackedByRooks(bishopPos.r, bishopPos.c) || currentSafeMoves.length === 0) {
+        endGame();
+      } else {
+        isPlayerTurn = true;
+        turnEl.textContent = "Bishop";
+        turnEl.style.color = "var(--gold)";
+        highlightValidMoves();
+      }
+    }
+
+    function getRookMoves(rook, otherRook) {
+      const moves = [];
+      const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+      for (let [dr, dc] of dirs) {
+        let nr = rook.r + dr;
+        let nc = rook.c + dc;
+        while (nr >= 0 && nr < 4 && nc >= 0 && nc < 4) {
+          if (nr === otherRook.r && nc === otherRook.c) break; // blocked by other rook
+          moves.push({ r: nr, c: nc });
+          nr += dr;
+          nc += dc;
+        }
+      }
+      return moves;
+    }
+
+    function getSquareEl(r, c) {
+      return document.querySelector(`.square[data-row="${r}"][data-col="${c}"]`);
+    }
+
+    function endGame() {
+      document.getElementById('final-score').textContent = score;
+      
+      // Dynamic random & performance-based rank generator
+      const title = RANK_TITLES[Math.floor(Math.random() * RANK_TITLES.length)];
+      const adj = RANK_ADJECTIVES[Math.floor(Math.random() * RANK_ADJECTIVES.length)];
+      
+      document.getElementById('rank-display').textContent = `Rank: ${adj} ${title}`;
+      modalEl.classList.add('active');
+    }
+
+    // Start Game on Page Load
+    initGame();
+  </script>
+</body>
+</html>
